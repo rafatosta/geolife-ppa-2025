@@ -18,7 +18,7 @@ export function SessionRoute() {
 
 export function ActiveRoute({ admin = false }: { admin?: boolean }) {
   const { profile, loading, error, refresh } = useProfile();
-  if (loading) return <LoadingState label="Preparando o Meta Escolar…" />;
+  if (loading) return <LoadingState label="Preparando o Geolife PPA 2025…" />;
   if (error || !profile) return <main className="mx-auto max-w-md p-page"><ErrorState message={error ?? 'Perfil não encontrado.'} onRetry={refresh} /></main>;
   if (profile.status === 'pending') return <Navigate to="/aguardando-aprovacao" replace />;
   if (profile.status === 'rejected') return <Navigate to="/acesso-negado" replace />;
@@ -31,7 +31,7 @@ export function ActiveRoute({ admin = false }: { admin?: boolean }) {
 export function RootRedirect() {
   const { user, loading: authLoading } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
-  if (authLoading || (user && profileLoading)) return <LoadingState label="Preparando o Meta Escolar…" />;
+  if (authLoading || (user && profileLoading)) return <LoadingState label="Preparando o Geolife PPA 2025…" />;
   if (!user) return <Navigate to="/login" replace />;
   if (!profile) return <Navigate to="/login" replace />;
   const paths = { pending: '/aguardando-aprovacao', rejected: '/acesso-negado', blocked: '/acesso-bloqueado' } as const;

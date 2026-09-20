@@ -1,4 +1,4 @@
-# Meta Escolar
+# Geolife PPA 2025
 
 Aplicativo web mobile-first para acompanhar compromissos, entregas escolares, evidências e uma meta financeira mensal reduzida por descontos auditáveis. A aplicação separa autenticação por e-mail e senha de autorização: toda conta nasce pendente e só acessa dados depois da aprovação de um administrador.
 
@@ -72,7 +72,7 @@ npx supabase --version
 npx supabase projects list
 ```
 
-É possível que `projects list` mostre normalmente o projeto `meta-escolar`, enquanto o comando abaixo falha ao buscar e validar as API keys:
+É possível que `projects list` mostre normalmente o projeto `geolife-ppa-2025`, enquanto o comando abaixo falha ao buscar e validar as API keys:
 
 ```bash
 npx supabase link --project-ref zmxusmuxorbnsrsizfzl
