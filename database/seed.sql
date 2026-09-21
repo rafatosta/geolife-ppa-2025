@@ -4,11 +4,11 @@
 -- Coordenadas aproximadas representam regiões, não localizações de indivíduos.
 -- Status de conservação são exemplos didáticos, sem valor de avaliação oficial.
 -- Fotografias ficam NULL: não há imagens de campo fornecidas para estes registros.
--- Execute após schema.sql em banco vazio por meio de npm run db:reset.
+-- Execute após schema.sql no SQL Editor do Supabase.
 
 BEGIN TRANSACTION;
 
-INSERT INTO especie (id_especie, nome_popular, nome_cientifico, familia, classe, status_conservacao) VALUES
+INSERT INTO public.especies (id, nome_popular, nome_cientifico, familia, classe, status_conservacao) VALUES
     (1, 'Onça-pintada', 'Panthera onca', 'Felidae', 'Mammalia', 'Quase ameaçada'),
     (2, 'Mico-leão-da-cara-dourada', 'Leontopithecus chrysomelas', 'Callitrichidae', 'Mammalia', 'Em perigo'),
     (3, 'Pau-brasil', 'Paubrasilia echinata', 'Fabaceae', 'Magnoliopsida', 'Em perigo'),
@@ -30,7 +30,7 @@ INSERT INTO especie (id_especie, nome_popular, nome_cientifico, familia, classe,
     (19, 'Preguiça-comum', 'Bradypus variegatus', 'Bradypodidae', 'Mammalia', 'Pouco preocupante'),
     (20, 'Sabiá-laranjeira', 'Turdus rufiventris', 'Turdidae', 'Aves', 'Pouco preocupante');
 
-INSERT INTO regiao (id_regiao, nome, tipo_ecossistema, latitude, longitude, descricao) VALUES
+INSERT INTO public.regioes (id, nome, tipo_ecossistema, latitude, longitude, descricao) VALUES
     (1, 'Reserva de Una', 'Mata Atlântica', -15.18333333, -39.05, 'Setor demonstrativo de floresta úmida com trilhas de inventário e pontos de monitoramento de fauna.'),
     (2, 'Chapada Diamantina', 'Cerrado e Caatinga', -12.86666667, -41.38333333, 'Setor demonstrativo de serras, campos rupestres e vegetação de transição.'),
     (3, 'Costa do Descobrimento', 'Mata Atlântica', -16.44347222, -39.06416667, 'Setor demonstrativo com fragmentos florestais, restinga e vegetação costeira.'),
@@ -40,7 +40,7 @@ INSERT INTO regiao (id_regiao, nome, tipo_ecossistema, latitude, longitude, desc
     (7, 'Serra do Conduru', 'Mata Atlântica', -14.48333333, -39.1, 'Setor demonstrativo de floresta com árvores de grande porte e cursos de água.'),
     (8, 'Lagoa urbana de Salvador', 'Lagoa e vegetação urbana', -12.945, -38.425, 'Área fictícia de acompanhamento de fauna em ambiente urbano, com margens vegetadas e trilha de visitação.');
 
-INSERT INTO observacao (data, descricao, foto_url, id_especie, id_regiao) VALUES
+INSERT INTO public.observacoes (data, descricao, foto_url, especie_id, regiao_id) VALUES
     ('2026-01-11', 'Grupo de cinco indivíduos deslocando-se pelo dossel ao amanhecer.', NULL, 2, 1),
     ('2026-01-12', 'Três plantas adultas inventariadas em trecho rochoso da trilha.', NULL, 14, 2),
     ('2026-01-13', 'Árvore adulta identificada durante inventário do fragmento florestal.', NULL, 3, 3),
@@ -89,5 +89,8 @@ INSERT INTO observacao (data, descricao, foto_url, id_especie, id_regiao) VALUES
     ('2026-08-16', 'Retorno à árvore marcada com registro de perda parcial de folhas.', NULL, 15, 6),
     ('2026-08-17', 'Indivíduo forrageando na serrapilheira após chuva leve.', NULL, 20, 7),
     ('2026-08-18', NULL, NULL, 11, 8);
+
+SELECT setval(pg_get_serial_sequence('public.especies', 'id'), (SELECT max(id) FROM public.especies));
+SELECT setval(pg_get_serial_sequence('public.regioes', 'id'), (SELECT max(id) FROM public.regioes));
 
 COMMIT;
