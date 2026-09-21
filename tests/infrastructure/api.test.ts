@@ -1,88 +1,77 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { getSupabase } = vi.hoisted(() => ({ getSupabase: vi.fn() }));
+vi.mock("../../src/framework/supabase", () => ({ getSupabase }));
+
 import { createCrudApi } from "../../src/framework/api";
 
 type Item = { id: number; nome: string };
 type NewItem = { nome: string };
+type ItemRow = { id: number; nome_item: string };
 
-const api = createCrudApi<Item, NewItem>("itens");
+const api = createCrudApi<Item, NewItem, ItemRow>({
+  table: "itens",
+  idColumn: "id",
+  fromRow: (row) => ({ id: row.id, nome: row.nome_item }),
+  toRow: (item) => ({ nome_item: item.nome }),
+});
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => vi.clearAllMocks());
 
-describe("infraestrutura da API", () => {
-  it("lista recursos usando /api", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify([{ id: 1, nome: "Teste" }]), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+describe("infraestrutura Supabase", () => {
+  it("lista a tabela e converte snake_case para o modelo", async () => {
+    const order = vi.fn().mockResolvedValue({
+      data: [{ id: 1, nome_item: "Teste" }],
+      error: null,
+    });
+    const select = vi.fn(() => ({ order }));
+    const from = vi.fn(() => ({ select }));
+    getSupabase.mockReturnValue({ from });
 
     await expect(api.listar()).resolves.toEqual([{ id: 1, nome: "Teste" }]);
-    expect(fetchMock).toHaveBeenCalledWith("/api/itens", expect.any(Object));
+    expect(from).toHaveBeenCalledWith("itens");
+    expect(order).toHaveBeenCalledWith("id", { ascending: false });
   });
 
-  it("envia JSON ao criar", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ id: 2, nome: "Novo" }), {
-        status: 201,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+  it("converte o payload e devolve a linha criada", async () => {
+    const single = vi.fn().mockResolvedValue({
+      data: { id: 2, nome_item: "Novo" },
+      error: null,
+    });
+    const select = vi.fn(() => ({ single }));
+    const insert = vi.fn(() => ({ select }));
+    getSupabase.mockReturnValue({ from: vi.fn(() => ({ insert })) });
 
-    await api.criar({ nome: "Novo" });
-    const [, options] = fetchMock.mock.calls[0];
-    expect(options?.method).toBe("POST");
-    expect(new Headers(options?.headers).get("Content-Type")).toBe(
-      "application/json",
-    );
+    await expect(api.criar({ nome: "Novo" })).resolves.toEqual({
+      id: 2,
+      nome: "Novo",
+    });
+    expect(insert).toHaveBeenCalledWith({ nome_item: "Novo" });
   });
 
-  it("não envia Content-Type JSON em DELETE sem corpo", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response(null, { status: 204 }));
+  it("filtra pelo id ao excluir", async () => {
+    const eq = vi.fn().mockResolvedValue({ data: null, error: null });
+    const remove = vi.fn(() => ({ eq }));
+    getSupabase.mockReturnValue({ from: vi.fn(() => ({ delete: remove })) });
 
-    await api.excluir(3);
-    const [, options] = fetchMock.mock.calls[0];
-    expect(options?.method).toBe("DELETE");
-    expect(new Headers(options?.headers).has("Content-Type")).toBe(false);
+    await expect(api.excluir(3)).resolves.toBeUndefined();
+    expect(eq).toHaveBeenCalledWith("id", 3);
   });
-});
 
-it("traduz falhas de conexão e restrições do banco", async () => {
-  vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(
-    new TypeError("Failed to fetch"),
-  );
-  await expect(api.listar()).rejects.toThrow("Não foi possível conectar à API");
-  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-    new Response(
-      JSON.stringify({
-        message: "UNIQUE constraint failed: especie.nome_cientifico",
-      }),
-      { status: 400 },
-    ),
-  );
-  await expect(api.criar({ nome: "Teste" })).rejects.toThrow(
-    "Já existe uma espécie",
-  );
-  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-    new Response(JSON.stringify({ message: "FOREIGN KEY constraint failed" }), {
-      status: 400,
-    }),
-  );
-  await expect(api.excluir(1)).rejects.toThrow("observações vinculadas");
-});
-it("trata resposta inválida e proibição de acesso", async () => {
-  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-    new Response("indisponível", { status: 502 }),
-  );
-  await expect(api.listar()).rejects.toThrow("API está indisponível");
-  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-    new Response("invalid", { status: 200 }),
-  );
-  await expect(api.listar()).rejects.toThrow("resposta inválida");
-  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-    new Response("", { status: 403 }),
-  );
-  await expect(api.listar()).rejects.toThrow("Acesso não autorizado");
+  it.each([
+    ["23505", "Já existe uma espécie"],
+    ["23503", "observações vinculadas"],
+    ["23502", "campos obrigatórios"],
+    ["42501", "Acesso não autorizado"],
+  ])("traduz o erro PostgreSQL %s", async (code, message) => {
+    const eq = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code, message: "erro", details: "", hint: "" },
+    });
+    getSupabase.mockReturnValue({
+      from: vi.fn(() => ({ delete: vi.fn(() => ({ eq })) })),
+    });
+
+    await expect(api.excluir(1)).rejects.toThrow(message);
+  });
 });

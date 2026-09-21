@@ -1,48 +1,6 @@
-/** INFRAESTRUTURA: encapsula Fetch, JSON, métodos HTTP e erros. */
-async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const headers = new Headers(options.headers);
-
-  if (options.body != null && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  let response: Response;
-  try {
-    response = await fetch(url, { ...options, headers });
-  } catch {
-    throw new Error(
-      "Não foi possível conectar à API. Verifique se o backend está em execução e tente novamente.",
-    );
-  }
-  if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    const message =
-      typeof error?.message === "string"
-        ? error.message
-        : "A API está indisponível. Tente novamente.";
-    if (message.includes("UNIQUE constraint"))
-      throw new Error("Já existe uma espécie com este nome científico.");
-    if (message.includes("FOREIGN KEY constraint"))
-      throw new Error(
-        options.method === "DELETE"
-          ? "Este registro possui observações vinculadas. Remova ou altere os vínculos antes de excluí-lo."
-          : "A espécie ou a região selecionada não está mais disponível. Recarregue os registros.",
-      );
-    if (response.status === 401 || response.status === 403)
-      throw new Error("Acesso não autorizado pela API.");
-    if (message.includes("NOT NULL constraint"))
-      throw new Error("Preencha todos os campos obrigatórios.");
-    throw new Error(message);
-  }
-  if (response.status === 204) return undefined as T;
-  try {
-    return (await response.json()) as T;
-  } catch {
-    throw new Error(
-      "A API retornou uma resposta inválida. Recarregue os registros antes de tentar novamente.",
-    );
-  }
-}
+/** INFRAESTRUTURA: traduz o CRUD da aplicação para consultas ao Supabase. */
+import type { PostgrestError } from "@supabase/supabase-js";
+import { getSupabase } from "./supabase";
 
 export type CrudApi<TEntity, TCreate> = {
   listar(): Promise<TEntity[]>;
@@ -52,20 +10,84 @@ export type CrudApi<TEntity, TCreate> = {
   excluir(id: number): Promise<void>;
 };
 
-export function createCrudApi<TEntity, TCreate>(
-  resource: string,
-): CrudApi<TEntity, TCreate> {
-  const base = `/api/${resource}`;
+type CrudResource<TEntity, TCreate, TRow extends Record<string, unknown>> = {
+  table: string;
+  idColumn: string;
+  fromRow(row: TRow): TEntity;
+  toRow(data: TCreate): Omit<TRow, "id">;
+};
+
+function translateError(error: PostgrestError): Error {
+  if (error.code === "23505")
+    return new Error("Já existe uma espécie com este nome científico.");
+  if (error.code === "23503")
+    return new Error(
+      "Este registro possui observações vinculadas. Remova ou altere os vínculos antes de excluí-lo.",
+    );
+  if (error.code === "23502")
+    return new Error("Preencha todos os campos obrigatórios.");
+  if (error.code === "42501" || error.code === "PGRST301")
+    return new Error("Acesso não autorizado pelo Supabase.");
+  return new Error(
+    error.message || "O Supabase está indisponível. Tente novamente.",
+  );
+}
+
+function requireData<T>(data: T | null, error: PostgrestError | null): T {
+  if (error) throw translateError(error);
+  if (data == null)
+    throw new Error("O Supabase não retornou os dados esperados.");
+  return data;
+}
+
+export function createCrudApi<
+  TEntity,
+  TCreate,
+  TRow extends Record<string, unknown>,
+>(resource: CrudResource<TEntity, TCreate, TRow>): CrudApi<TEntity, TCreate> {
   return {
-    listar: () => request<TEntity[]>(base),
-    buscar: (id) => request<TEntity>(`${base}/${id}`),
-    criar: (data) =>
-      request<TEntity>(base, { method: "POST", body: JSON.stringify(data) }),
-    atualizar: (id, data) =>
-      request<TEntity>(`${base}/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(data),
-      }),
-    excluir: (id) => request<void>(`${base}/${id}`, { method: "DELETE" }),
+    async listar() {
+      const { data, error } = await getSupabase()
+        .from(resource.table)
+        .select("*")
+        .order(resource.idColumn, { ascending: false });
+      return requireData(data as TRow[] | null, error).map(resource.fromRow);
+    },
+    async buscar(id) {
+      const { data, error } = await getSupabase()
+        .from(resource.table)
+        .select("*")
+        .eq(resource.idColumn, id)
+        .single();
+      return resource.fromRow(requireData(data as TRow | null, error));
+    },
+    async criar(data) {
+      const result = await getSupabase()
+        .from(resource.table)
+        .insert(resource.toRow(data) as never)
+        .select("*")
+        .single();
+      return resource.fromRow(
+        requireData(result.data as TRow | null, result.error),
+      );
+    },
+    async atualizar(id, data) {
+      const result = await getSupabase()
+        .from(resource.table)
+        .update(resource.toRow(data) as never)
+        .eq(resource.idColumn, id)
+        .select("*")
+        .single();
+      return resource.fromRow(
+        requireData(result.data as TRow | null, result.error),
+      );
+    },
+    async excluir(id) {
+      const { error } = await getSupabase()
+        .from(resource.table)
+        .delete()
+        .eq(resource.idColumn, id);
+      if (error) throw translateError(error);
+    },
   };
 }
