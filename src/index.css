@@ -204,7 +204,7 @@ p {
   color: white;
   background:
     linear-gradient(180deg, #0e211bd9 0%, #152c226b 58%, #1b322be0 100%),
-    url("/images/hero-nature.jpg") center 48% / cover;
+    url("../images/hero-nature.jpg") center 48% / cover;
 }
 .hero-content {
   padding: 65px 24px 75px;
